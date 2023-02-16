@@ -1,9 +1,11 @@
 provider "aws" {
   region = var.region
-  access_key = ""
-  secret_key = ""
+  profile = var.profile
 }
 
+variable "profile" {
+  type = string
+}
 variable "region" {
   type = string
 }
