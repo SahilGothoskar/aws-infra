@@ -55,3 +55,15 @@ The public route table is associated with the public subnets in the aws_route_ta
 A default route to the internet is created in the aws_route block, where the destination CIDR block is set to 0.0.0.0/0 and the gateway is the main Internet Gateway.
 
 ```
+
+## To run the code
+
+
+```
+# terraform init 
+
+# terraform plan  ( It will prompt to enter the ami-id and region)
+
+# terraform apply --auto-approve (Enter the ami-id generated from the packer build  and run in the required region )
+
+```
