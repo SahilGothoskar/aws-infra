@@ -138,6 +138,9 @@ resource "aws_instance" "Terraform_Managed" {
   vpc_security_group_ids      = [aws_security_group.instance.id]
   associate_public_ip_address = true # enable public IP and DNS for the instance
 
+  root_block_device {
+    volume_size = 50 # root volume size in GB
+  }
   tags = {
     Name = "Terraform_Managed_Custom_AMI_Instance"
   }
@@ -149,6 +152,7 @@ resource "aws_instance" "Terraform_Managed" {
   }
 
   availability_zone = data.aws_availability_zones.available.names[0]
+
 }
 
 #Note the addition of the count parameter to ensure that only one instance is created, as well as the use of the data.aws_availability_zones data source to retrieve the list of available availability zones for the selected region, and the use of the [0] index to ensure that the instance is launched in the first available zone. The lifecycle block with the ignore_changes parameter is also added to prevent changes to the subnet ID from triggering the creation of a new instance.
