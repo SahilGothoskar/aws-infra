@@ -128,7 +128,44 @@ resource "aws_security_group" "instance" {
     protocol    = "all"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name = "application-sg"
+  }
 }
+
+
+
+resource "aws_security_group" "db" {
+  name_prefix = "db-sg"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.instance.id]
+  }
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/8"] # Restrict SSH access to VPC CIDR range
+  }
+
+  egress {
+    from_port       = 0
+    to_port         = 0
+    protocol        = "all"
+    security_groups = [aws_security_group.instance.id]
+  }
+
+  tags = {
+    Name = "db-sg"
+  }
+}
+
 
 resource "aws_instance" "Terraform_Managed" {
   ami                         = var.ami
@@ -137,9 +174,11 @@ resource "aws_instance" "Terraform_Managed" {
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.instance.id]
   associate_public_ip_address = true # enable public IP and DNS for the instance
+  disable_api_termination     = false
 
   root_block_device {
-    volume_size = 50 # root volume size in GB
+    volume_size           = 50 # root volume size in GB
+    delete_on_termination = true
   }
   tags = {
     Name = "Terraform_Managed_Custom_AMI_Instance"
@@ -151,8 +190,200 @@ resource "aws_instance" "Terraform_Managed" {
     ignore_changes = [subnet_id]
   }
 
-  availability_zone = data.aws_availability_zones.available.names[0]
+  availability_zone    = data.aws_availability_zones.available.names[0]
+  iam_instance_profile = aws_iam_instance_profile.ec2_instance_profile.name
+}
 
+resource "aws_iam_instance_profile" "ec2_instance_profile" {
+  name = "EC2-CSYE6225-Instance-Profile"
+
+  role = aws_iam_role.ec2_csye6225_role.name
+}
+
+resource "aws_iam_role" "ec2_csye6225_role" {
+  name = "EC2-CSYE6225"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      },
+    ]
+  })
+
+  tags = {
+    Name = "EC2-CSYE6225-Role"
+  }
+}
+
+resource "aws_iam_role_policy_attachment" "webapp_s3_policy_attachment" {
+  policy_arn = aws_iam_policy.webapp_s3_policy.arn
+  role       = aws_iam_role.ec2_csye6225_role.name
 }
 
 #Note the addition of the count parameter to ensure that only one instance is created, as well as the use of the data.aws_availability_zones data source to retrieve the list of available availability zones for the selected region, and the use of the [0] index to ensure that the instance is launched in the first available zone. The lifecycle block with the ignore_changes parameter is also added to prevent changes to the subnet ID from triggering the creation of a new instance.
+
+
+resource "random_pet" "bucket_name" {
+  length    = 2
+  separator = "-"
+}
+
+resource "aws_s3_bucket" "my_bucket" {
+  bucket        = "my-${random_pet.bucket_name.id}-bucket"
+  force_destroy = true
+
+  tags = {
+    Environment = "Production"
+  }
+}
+
+
+output "bucket_name" {
+  value = aws_s3_bucket.my_bucket.bucket
+}
+resource "aws_s3_bucket_acl" "s3_bucket_acl" {
+  bucket = "my-${random_pet.bucket_name.id}-bucket"
+  acl    = "private"
+
+}
+
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "aws_s3_encrypt" {
+  bucket = "my-${random_pet.bucket_name.id}-bucket"
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+
+resource "aws_s3_bucket_lifecycle_configuration" "private_bucket_lifecycle" {
+  bucket = "my-${random_pet.bucket_name.id}-bucket"
+  rule {
+    id     = "transition-to-ia"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+  }
+}
+
+
+
+resource "aws_s3_bucket_policy" "private_bucket_policy" {
+  bucket = "my-${random_pet.bucket_name.id}-bucket"
+  depends_on = [
+    aws_s3_bucket_acl.s3_bucket_acl,
+    random_pet.bucket_name,
+    aws_s3_bucket.my_bucket
+  ]
+
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "DenyPublicAccess",
+        Effect    = "Deny",
+        Principal = "*",
+        Action    = "s3:GetObject",
+        Resource = [
+          "arn:aws:s3:::my-${random_pet.bucket_name.id}-bucket/*"
+        ],
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" : "false"
+          }
+        }
+      }
+    ]
+  })
+
+}
+
+resource "aws_s3_bucket_public_access_block" "my_bucket_public_access_block" {
+  bucket = "my-${random_pet.bucket_name.id}-bucket"
+
+  block_public_acls       = true
+  ignore_public_acls      = true
+  block_public_policy     = true
+  restrict_public_buckets = true
+}
+
+
+# Configure the PostgreSQL parameter group
+resource "aws_db_parameter_group" "postgres_params" {
+  name_prefix = "csye6225-postgres-params"
+  family      = "postgres14"
+}
+
+resource "aws_s3_object" "test_object" {
+  bucket  = "my-${random_pet.bucket_name.id}-bucket"
+  key     = "test_object.txt"
+  content = "Hello, World!"
+  depends_on = [
+    aws_s3_bucket_acl.s3_bucket_acl,
+    random_pet.bucket_name,
+    aws_s3_bucket.my_bucket,
+    aws_s3_bucket_policy.private_bucket_policy
+  ]
+}
+
+
+resource "aws_iam_policy" "webapp_s3_policy" {
+  name = "WebAppS3"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject",
+          "s3:ListBucket"
+        ]
+        Effect = "Allow"
+        Resource = [
+          "arn:aws:s3:::my-${random_pet.bucket_name.id}-bucket",
+          "arn:aws:s3:::my-${random_pet.bucket_name.id}-bucket/*",
+        ]
+      },
+    ]
+  })
+}
+
+
+resource "aws_db_subnet_group" "private_rds_subnet_group" {
+  name        = "private-rds-subnet-group"
+  description = "Private subnet group for RDS instances"
+  subnet_ids  = aws_subnet.private.*.id
+}
+
+resource "aws_db_instance" "rds_instance" {
+  identifier             = "csye6225"
+  allocated_storage      = 20
+  engine                 = "postgres"
+  engine_version         = "14.6"
+  instance_class         = "db.t3.micro"
+  db_name                = "csye6225"
+  username               = "csye6225"
+  password               = "redhat1234"
+  skip_final_snapshot    = true
+  publicly_accessible    = false
+  vpc_security_group_ids = [aws_security_group.db.id]
+  db_subnet_group_name   = aws_db_subnet_group.private_rds_subnet_group.name
+  parameter_group_name   = aws_db_parameter_group.postgres_params.name
+}
+
+
+
