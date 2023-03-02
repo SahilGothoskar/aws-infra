@@ -177,7 +177,7 @@ resource "aws_instance" "Terraform_Managed" {
   disable_api_termination     = false
   user_data                   = <<EOF
 #!/bin/bash
-chown ec2-user:ec2-user /home/ec2-user/scripts/webApp
+sudo chown ec2-user:ec2-user /home/ec2-user/scripts/webApp/*
 cd /home/ec2-user/scripts/webApp/config
 sudo sed -i 's/"localhost"/"${aws_db_instance.rds_instance.endpoint}"/g' config.json
 sudo sed -i 's/:5432//' config.json
