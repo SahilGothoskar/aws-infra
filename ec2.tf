@@ -1,6 +1,6 @@
 provider "aws" {
   region  = var.region
-  profile = "dev"
+  profile = "demo"
 }
 
 variable "region" {
@@ -175,6 +175,16 @@ resource "aws_instance" "Terraform_Managed" {
   vpc_security_group_ids      = [aws_security_group.instance.id]
   associate_public_ip_address = true # enable public IP and DNS for the instance
   disable_api_termination     = false
+  user_data                   = <<EOF
+#!/bin/bash
+chown ec2-user:ec2-user /home/ec2-user/webApp
+sudo mkdir /home/ec2-user/webApp/uploads
+cd /home/ec2-user/webApp/config
+sudo sed -i 's/"localhost"/"${aws_db_instance.rds_instance.endpoint}"/g' config.json
+cd /home/ec2-user/webApp/seeders
+sudo sed -i 's/process.env.AWS_S3_BUCKET_NAME/"${aws_s3_bucket.my_bucket.bucket}"/g' app.js
+
+EOF
 
   root_block_device {
     volume_size           = 50 # root volume size in GB
@@ -324,20 +334,20 @@ resource "aws_s3_bucket_public_access_block" "my_bucket_public_access_block" {
 # Configure the PostgreSQL parameter group
 resource "aws_db_parameter_group" "postgres_params" {
   name_prefix = "csye6225-postgres-params"
-  family      = "postgres14"
+  family      = "postgres13"
 }
 
-resource "aws_s3_object" "test_object" {
-  bucket  = "my-${random_pet.bucket_name.id}-bucket"
-  key     = "test_object.txt"
-  content = "Hello, World!"
-  depends_on = [
-    aws_s3_bucket_acl.s3_bucket_acl,
-    random_pet.bucket_name,
-    aws_s3_bucket.my_bucket,
-    aws_s3_bucket_policy.private_bucket_policy
-  ]
-}
+# resource "aws_s3_object" "test_object" {
+#   bucket  = "my-${random_pet.bucket_name.id}-bucket"
+#   key     = "test_object.txt"
+#   content = "Hello, World!"
+#   depends_on = [
+#     aws_s3_bucket_acl.s3_bucket_acl,
+#     random_pet.bucket_name,
+#     aws_s3_bucket.my_bucket,
+#     aws_s3_bucket_policy.private_bucket_policy
+#   ]
+# }
 
 
 resource "aws_iam_policy" "webapp_s3_policy" {
@@ -373,7 +383,7 @@ resource "aws_db_instance" "rds_instance" {
   identifier             = "csye6225"
   allocated_storage      = 20
   engine                 = "postgres"
-  engine_version         = "14.6"
+  engine_version         = "13.3"
   instance_class         = "db.t3.micro"
   db_name                = "csye6225"
   username               = "csye6225"
@@ -385,5 +395,8 @@ resource "aws_db_instance" "rds_instance" {
   parameter_group_name   = aws_db_parameter_group.postgres_params.name
 }
 
+output "rds_endpoint" {
+  value = "${aws_db_instance.rds_instance.endpoint}"
+}
 
 
