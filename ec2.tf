@@ -177,11 +177,11 @@ resource "aws_instance" "Terraform_Managed" {
   disable_api_termination     = false
   user_data                   = <<EOF
 #!/bin/bash
-chown ec2-user:ec2-user /home/ec2-user/webApp
-sudo mkdir /home/ec2-user/webApp/uploads
-cd /home/ec2-user/webApp/config
+chown ec2-user:ec2-user /home/ec2-user/scripts/webApp
+cd /home/ec2-user/scripts/webApp/config
 sudo sed -i 's/"localhost"/"${aws_db_instance.rds_instance.endpoint}"/g' config.json
-cd /home/ec2-user/webApp/seeders
+sudo sed -i 's/:5432//' config.json
+cd /home/ec2-user/scripts/webApp/seeders
 sudo sed -i 's/process.env.AWS_S3_BUCKET_NAME/"${aws_s3_bucket.my_bucket.bucket}"/g' app.js
 
 EOF
@@ -396,7 +396,6 @@ resource "aws_db_instance" "rds_instance" {
 }
 
 output "rds_endpoint" {
-  value = "${aws_db_instance.rds_instance.endpoint}"
+  value = aws_db_instance.rds_instance.endpoint
 }
-
 
