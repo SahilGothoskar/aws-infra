@@ -399,3 +399,28 @@ output "rds_endpoint" {
   value = aws_db_instance.rds_instance.endpoint
 }
 
+variable "domain_name" {
+  type = string
+}
+
+
+output "public_ip" {
+  value = aws_instance.Terraform_Managed[0].public_ip
+}
+
+
+data "aws_route53_zone" "main" {
+  name = var.domain_name
+}
+
+resource "aws_route53_record" "web" {
+  name    = var.domain_name
+  type    = "A"
+  zone_id = data.aws_route53_zone.main.zone_id
+
+  ttl = 300
+  records = [
+    aws_instance.Terraform_Managed[0].public_ip,
+  ]
+}
+
