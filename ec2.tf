@@ -399,6 +399,8 @@ output "rds_endpoint" {
   value = aws_db_instance.rds_instance.endpoint
 }
 
+###Assignment06#####
+
 variable "domain_name" {
   type = string
 }
@@ -424,3 +426,4 @@ resource "aws_route53_record" "web" {
   ]
 }
 
+######Assignment06####
