@@ -147,12 +147,12 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.instance.id]
   }
 
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["10.0.0.0/8"] # Restrict SSH access to VPC CIDR range
-  }
+  # ingress {
+  #   from_port   = 22
+  #   to_port     = 22
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["10.0.0.0/8"] # Restrict SSH access to VPC CIDR range
+  # }
 
   egress {
     from_port       = 0
