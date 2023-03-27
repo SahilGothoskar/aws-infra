@@ -236,6 +236,38 @@ resource "aws_iam_role_policy_attachment" "webapp_s3_policy_attachment" {
   role       = aws_iam_role.ec2_csye6225_role.name
 }
 
+#Assignment07_Code
+
+
+resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy_attachment" {
+  policy_arn = aws_iam_policy.cloudwatch_agent_policy.arn
+  role       = aws_iam_role.ec2_csye6225_role.name
+}
+
+
+resource "aws_iam_policy" "cloudwatch_agent_policy" {
+  name = "CloudWatchAgentPolicy"
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = [
+          "cloudwatch:PutMetricData",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Effect   = "Allow"
+        Resource = ["*"]
+      },
+    ]
+  })
+}
+
+
+## Assignment07 Code
+
+
 #Note the addition of the count parameter to ensure that only one instance is created, as well as the use of the data.aws_availability_zones data source to retrieve the list of available availability zones for the selected region, and the use of the [0] index to ensure that the instance is launched in the first available zone. The lifecycle block with the ignore_changes parameter is also added to prevent changes to the subnet ID from triggering the creation of a new instance.
 
 
