@@ -84,21 +84,25 @@ This Terraform script creates an S3 bucket, applies server-side encryption and l
 
 ### Provisioning AWS Security Groups for Application and Database Instances with Terraform
 
-```
+
 
 **aws_security_group.instance resource:**
 
+```
 - Creates a security group for the application instance
 - Allows incoming traffic on ports 22 (SSH), 80 (HTTP), 443 (HTTPS), and 5000 (application-specific port) from any IP address
 - Allows outgoing traffic to any IP address and any port
 - Tags the security group with the name "application-sg"
 
+```
+
 **aws_security_group.db resource:**
 
-    Creates a security group for the database instance
-    Allows incoming traffic on port 5432 (PostgreSQL default port) only from the application instance's security group
-    Allows outgoing traffic to any IP address and any port
-    Tags the security group with the name "db-sg"
+```
+- Creates a security group for the database instance
+- Allows incoming traffic on port 5432 (PostgreSQL default port) only from the application instance's security group
+- Allows outgoing traffic to any IP address and any port
+- Tags the security group with the name "db-sg"
     
 ```
 ## To run the code
