@@ -240,29 +240,29 @@ resource "aws_iam_role_policy_attachment" "webapp_s3_policy_attachment" {
 
 
 resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy_attachment" {
-  policy_arn = aws_iam_policy.cloudwatch_agent_policy.arn
+  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
   role       = aws_iam_role.ec2_csye6225_role.name
 }
 
 
-resource "aws_iam_policy" "cloudwatch_agent_policy" {
-  name = "CloudWatchAgentPolicy"
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "cloudwatch:PutMetricData",
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ]
-        Effect   = "Allow"
-        Resource = ["*"]
-      },
-    ]
-  })
-}
+# resource "aws_iam_policy" "cloudwatch_agent_policy" {
+#   name = "CloudWatchAgentPolicy"
+#   policy = jsonencode({
+#     Version = "2012-10-17"
+#     Statement = [
+#       {
+#         Action = [
+#           "cloudwatch:PutMetricData",
+#           "logs:CreateLogGroup",
+#           "logs:CreateLogStream",
+#           "logs:PutLogEvents"
+#         ]
+#         Effect   = "Allow"
+#         Resource = ["*"]
+#       },
+#     ]
+#   })
+# }
 
 
 ## Assignment07 Code
@@ -392,7 +392,14 @@ resource "aws_iam_policy" "webapp_s3_policy" {
           "s3:GetObject",
           "s3:PutObject",
           "s3:DeleteObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "cloudwatch:PutMetricData",
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "cloudwatch:GetMetricStatistics",
+          "cloudwatch:GetMetricData",
+          "cloudwatch:ListMetrics"
         ]
         Effect = "Allow"
         Resource = [
@@ -452,7 +459,7 @@ resource "aws_route53_record" "web" {
   type    = "A"
   zone_id = data.aws_route53_zone.main.zone_id
 
-  ttl = 300
+  ttl = 30
   records = [
     aws_instance.Terraform_Managed[0].public_ip,
   ]
