@@ -102,24 +102,10 @@ resource "aws_security_group" "instance" {
   }
 
   ingress {
-    from_port   = 5000
-    to_port     = 5000
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 5000
+    to_port         = 5000
+    protocol        = "tcp"
+    security_groups = [aws_security_group.load_balancer_sg.id]
   }
 
   egress {
@@ -134,6 +120,32 @@ resource "aws_security_group" "instance" {
   }
 }
 
+
+
+resource "aws_security_group" "load_balancer_sg" {
+  name_prefix = "lb-sg"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "all"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+
+  tags = {
+    Name = "load-balancer-sg"
+  }
+}
 
 
 resource "aws_security_group" "db" {
@@ -166,16 +178,10 @@ resource "aws_security_group" "db" {
   }
 }
 
+data "template_file" "user_data" {
 
-resource "aws_instance" "Terraform_Managed" {
-  ami                         = var.ami
-  instance_type               = "t2.micro"
-  key_name                    = "SG"
-  subnet_id                   = aws_subnet.public[0].id
-  vpc_security_group_ids      = [aws_security_group.instance.id]
-  associate_public_ip_address = true # enable public IP and DNS for the instance
-  disable_api_termination     = false
-  user_data                   = <<EOF
+  template = <<EOF
+
 #!/bin/bash
 sudo chown ec2-user:ec2-user /home/ec2-user/scripts/webApp/*
 cd /home/ec2-user/scripts/webApp/config
@@ -186,24 +192,106 @@ sudo sed -i 's/process.env.AWS_S3_BUCKET_NAME/"${aws_s3_bucket.my_bucket.bucket}
 
 EOF
 
-  root_block_device {
-    volume_size           = 50 # root volume size in GB
-    delete_on_termination = true
+}
+
+resource "aws_launch_template" "lt" {
+  name                    = "asg_launch_config"
+  image_id                = var.ami
+  instance_type           = "t2.micro"
+  key_name                = "SG"
+  disable_api_termination = false
+
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.instance.id]
+    subnet_id                   = aws_subnet.public[0].id
+  }
+
+  user_data = base64encode(data.template_file.user_data.rendered)
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_instance_profile.name
+  }
+
+  placement {
+    availability_zone = data.aws_availability_zones.available.names[0]
+  }
+
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      delete_on_termination = true
+      volume_size           = 50
+      volume_type           = "gp2"
+    }
   }
   tags = {
     Name = "Terraform_Managed_Custom_AMI_Instance"
   }
-
-  count = 1
-
-  lifecycle {
-    ignore_changes = [subnet_id]
-  }
-
-  availability_zone    = data.aws_availability_zones.available.names[0]
-  iam_instance_profile = aws_iam_instance_profile.ec2_instance_profile.name
 }
 
+
+# resource "aws_instance" "Terraform_Managed" {
+#   ami                         = var.ami
+#   instance_type               = "t2.micro"
+#   key_name                    = "SG"
+#   subnet_id                   = aws_subnet.public[0].id
+#   vpc_security_group_ids      = [aws_security_group.instance.id]
+#   associate_public_ip_address = true # enable public IP and DNS for the instance
+#   disable_api_termination     = false
+#   user_data                   = <<EOF
+# #!/bin/bash
+# sudo chown ec2-user:ec2-user /home/ec2-user/scripts/webApp/*
+# cd /home/ec2-user/scripts/webApp/config
+# sudo sed -i 's/"localhost"/"${aws_db_instance.rds_instance.endpoint}"/g' config.json
+# sudo sed -i 's/:5432//' config.json
+# cd /home/ec2-user/scripts/webApp/seeders
+# sudo sed -i 's/process.env.AWS_S3_BUCKET_NAME/"${aws_s3_bucket.my_bucket.bucket}"/g' app.js
+
+# EOF
+
+#   root_block_device {
+#     volume_size           = 50 # root volume size in GB
+#     delete_on_termination = true
+#   }
+#   tags = {
+#     Name = "Terraform_Managed_Custom_AMI_Instance"
+#   }
+
+#   count = 1
+
+#   lifecycle {
+#     ignore_changes = [subnet_id]
+#   }
+
+#   availability_zone    = data.aws_availability_zones.available.names[0]
+#   iam_instance_profile = aws_iam_instance_profile.ec2_instance_profile.name
+# }
+
+
+resource "aws_autoscaling_group" "autoscaling" {
+
+  name                      = "csye6225-asg-spring2023"
+  vpc_zone_identifier       = [for subnet in aws_subnet.public : subnet.id]
+  max_size                  = 3
+  min_size                  = 1
+  health_check_grace_period = 300
+  health_check_type         = "EC2"
+  force_delete              = true
+  default_cooldown          = 60
+
+  launch_template {
+    id      = aws_launch_template.lt.id
+    version = aws_launch_template.lt.latest_version
+  }
+  target_group_arns = [aws_lb_target_group.target_group.arn]
+  tag {
+    key                 = "Key"
+    value               = "Value"
+    propagate_at_launch = true
+  }
+
+}
 resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "EC2-CSYE6225-Instance-Profile"
 
@@ -444,14 +532,72 @@ variable "domain_name" {
   type = string
 }
 
-
-output "public_ip" {
-  value = aws_instance.Terraform_Managed[0].public_ip
+resource "aws_lb" "load_balancer" {
+  name               = "web-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.load_balancer_sg.id]
+  subnets            = [aws_subnet.public[0].id, aws_subnet.public[1].id, aws_subnet.public[2].id]
+  tags = {
+    Environment = "prod"
+  }
 }
+
+output "load_balancer_dns_name" {
+  value = aws_lb.load_balancer.dns_name
+}
+
+# output "public_ip" {
+#   value = aws_instance.Terraform_Managed[0].public_ip
+# }
 
 
 data "aws_route53_zone" "main" {
   name = var.domain_name
+
+}
+
+# resource "aws_route53_record" "web" {
+#   name    = var.domain_name
+#   type    = "A"
+#   zone_id = data.aws_route53_zone.main.zone_id
+
+#   ttl = 30
+#   records = [
+#     aws_instance.Terraform_Managed[0].public_ip,
+#   ]
+# }
+
+######Assignment06####
+resource "aws_lb_listener" "lb_listener" {
+
+  load_balancer_arn = aws_lb.load_balancer.arn
+  port              = "80"
+  protocol          = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.target_group.arn
+  }
+
+}
+
+
+resource "aws_lb_target_group" "target_group" {
+  name        = "web-tg"
+  port        = 5000
+  protocol    = "HTTP"
+  target_type = "instance"
+  vpc_id      = aws_vpc.main.id
+  health_check {
+    interval            = 30
+    path                = "/healthz"
+    protocol            = "HTTP"
+    timeout             = 5
+    unhealthy_threshold = 2
+    port                = 5000
+  }
+
+
 }
 
 resource "aws_route53_record" "web" {
@@ -459,10 +605,9 @@ resource "aws_route53_record" "web" {
   type    = "A"
   zone_id = data.aws_route53_zone.main.zone_id
 
-  ttl = 30
-  records = [
-    aws_instance.Terraform_Managed[0].public_ip,
-  ]
+  alias {
+    name                   = aws_lb.load_balancer.dns_name
+    zone_id                = aws_lb.load_balancer.zone_id
+    evaluate_target_health = true
+  }
 }
-
-######Assignment06####
