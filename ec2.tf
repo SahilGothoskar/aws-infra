@@ -611,3 +611,63 @@ resource "aws_route53_record" "web" {
     evaluate_target_health = true
   }
 }
+
+# Upscaling 
+
+resource "aws_cloudwatch_metric_alarm" "scaleuppolicyalarm" {
+  alarm_name          = "scaleuppolicyalarm"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 120
+  statistic           = "Average"
+  threshold           = 5
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.autoscaling.name
+  }
+
+  alarm_description = "ec2 cpu utilization monitoring"
+  alarm_actions     = [aws_autoscaling_policy.upautoscaling_policy.arn]
+}
+
+
+#Downscaling 
+
+resource "aws_cloudwatch_metric_alarm" "scaledownpolicyalarm" {
+  alarm_name          = "scaledownpolicyalarm"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 120
+  statistic           = "Average"
+  threshold           = 3
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.autoscaling.name
+  }
+
+  alarm_description = "ec2 cpu utilization monitoring"
+  alarm_actions     = [aws_autoscaling_policy.downautoscaling_policy.arn]
+}
+
+resource "aws_autoscaling_policy" "upautoscaling_policy" {
+  name                   = "upautoscaling_policy"
+  scaling_adjustment     = 1
+  adjustment_type        = "PercentChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.autoscaling.name
+}
+
+
+resource "aws_autoscaling_policy" "downautoscaling_policy" {
+  name                   = "upautoscaling_policy"
+  scaling_adjustment     = -1
+  adjustment_type        = "PercentChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.autoscaling.name
+}
+
+
