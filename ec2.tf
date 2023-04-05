@@ -94,12 +94,12 @@ resource "aws_security_group" "instance" {
   name_prefix = "instance-sg"
   vpc_id      = aws_vpc.main.id
 
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  # ingress {
+  #   from_port   = 22
+  #   to_port     = 22
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
 
   ingress {
     from_port       = 5000
@@ -332,27 +332,6 @@ resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy_attachment" {
   role       = aws_iam_role.ec2_csye6225_role.name
 }
 
-
-# resource "aws_iam_policy" "cloudwatch_agent_policy" {
-#   name = "CloudWatchAgentPolicy"
-#   policy = jsonencode({
-#     Version = "2012-10-17"
-#     Statement = [
-#       {
-#         Action = [
-#           "cloudwatch:PutMetricData",
-#           "logs:CreateLogGroup",
-#           "logs:CreateLogStream",
-#           "logs:PutLogEvents"
-#         ]
-#         Effect   = "Allow"
-#         Resource = ["*"]
-#       },
-#     ]
-#   })
-# }
-
-
 ## Assignment07 Code
 
 
@@ -456,19 +435,6 @@ resource "aws_db_parameter_group" "postgres_params" {
   name_prefix = "csye6225-postgres-params"
   family      = "postgres13"
 }
-
-# resource "aws_s3_object" "test_object" {
-#   bucket  = "my-${random_pet.bucket_name.id}-bucket"
-#   key     = "test_object.txt"
-#   content = "Hello, World!"
-#   depends_on = [
-#     aws_s3_bucket_acl.s3_bucket_acl,
-#     random_pet.bucket_name,
-#     aws_s3_bucket.my_bucket,
-#     aws_s3_bucket_policy.private_bucket_policy
-#   ]
-# }
-
 
 resource "aws_iam_policy" "webapp_s3_policy" {
   name = "WebAppS3"
