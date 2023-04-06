@@ -555,7 +555,7 @@ resource "aws_lb_target_group" "target_group" {
   target_type = "instance"
   vpc_id      = aws_vpc.main.id
   health_check {
-    interval            = 30
+    interval            = 1800
     path                = "/healthz"
     protocol            = "HTTP"
     timeout             = 5
@@ -629,7 +629,7 @@ resource "aws_autoscaling_policy" "upautoscaling_policy" {
 
 
 resource "aws_autoscaling_policy" "downautoscaling_policy" {
-  name                   = "upautoscaling_policy"
+  name                   = "downautoscaling_policy"
   scaling_adjustment     = -1
   adjustment_type        = "PercentChangeInCapacity"
   cooldown               = 60
@@ -637,3 +637,6 @@ resource "aws_autoscaling_policy" "downautoscaling_policy" {
 }
 
 
+resource "aws_cloudwatch_log_group" "csye6225-spring2023" {
+  name = "csye6225-spring2023"
+}
