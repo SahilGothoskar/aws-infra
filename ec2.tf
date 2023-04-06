@@ -555,7 +555,7 @@ resource "aws_lb_target_group" "target_group" {
   target_type = "instance"
   vpc_id      = aws_vpc.main.id
   health_check {
-    interval            = 1800
+    interval            = 300
     path                = "/healthz"
     protocol            = "HTTP"
     timeout             = 5
