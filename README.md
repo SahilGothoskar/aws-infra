@@ -116,3 +116,10 @@ This Terraform script creates an S3 bucket, applies server-side encryption and l
 # terraform apply --auto-approve (Enter the ami-id generated from the packer build  and run in the required region )
 
 ```
+
+## To import Certificate
+
+```
+# aws acm import-certificate --certificate fileb://D:/CSYE6225_Assignments_Done_Sahil/demo_sahilgothoskar_me/demo_sahilgothoskar_me.crt --certificate-chain fileb://D:/CSYE6225_Assignments_Done_Sahil/demo_sahilgothoskar_me/demo_sahilgothoskar_me.ca-bundle  --private-key fileb://C:/Users/Sahil/private_key.pem --profile=demo
+
+```

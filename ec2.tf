@@ -133,6 +133,12 @@ resource "aws_security_group" "load_balancer_sg" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   egress {
     from_port   = 0
@@ -223,13 +229,15 @@ resource "aws_launch_template" "lt" {
       delete_on_termination = true
       volume_size           = 50
       volume_type           = "gp2"
+      # kms_key_id            = aws_kms_key.ebs_key.arn
+      # encrypted             = true
     }
   }
+
   tags = {
     Name = "Terraform_Managed_Custom_AMI_Instance"
   }
 }
-
 
 # resource "aws_instance" "Terraform_Managed" {
 #   ami                         = var.ami
@@ -275,14 +283,16 @@ resource "aws_autoscaling_group" "autoscaling" {
   vpc_zone_identifier       = [for subnet in aws_subnet.public : subnet.id]
   max_size                  = 3
   min_size                  = 1
-  health_check_grace_period = 300
+  health_check_grace_period = 30
   health_check_type         = "EC2"
   force_delete              = true
   default_cooldown          = 60
 
+
   launch_template {
     id      = aws_launch_template.lt.id
     version = aws_launch_template.lt.latest_version
+    
   }
   target_group_arns = [aws_lb_target_group.target_group.arn]
   tag {
@@ -356,11 +366,11 @@ resource "aws_s3_bucket" "my_bucket" {
 output "bucket_name" {
   value = aws_s3_bucket.my_bucket.bucket
 }
-resource "aws_s3_bucket_acl" "s3_bucket_acl" {
-  bucket = "my-${random_pet.bucket_name.id}-bucket"
-  acl    = "private"
+# resource "aws_s3_bucket_acl" "s3_bucket_acl" {
+#   bucket = "my-${random_pet.bucket_name.id}-bucket"
+#   acl    = "private"
 
-}
+# }
 
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "aws_s3_encrypt" {
@@ -392,7 +402,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "private_bucket_lifecycle" {
 resource "aws_s3_bucket_policy" "private_bucket_policy" {
   bucket = "my-${random_pet.bucket_name.id}-bucket"
   depends_on = [
-    aws_s3_bucket_acl.s3_bucket_acl,
+    //  aws_s3_bucket_acl.s3_bucket_acl,
     random_pet.bucket_name,
     aws_s3_bucket.my_bucket
   ]
@@ -472,6 +482,36 @@ resource "aws_db_subnet_group" "private_rds_subnet_group" {
   subnet_ids  = aws_subnet.private.*.id
 }
 
+resource "aws_kms_key" "rds_encryption_key" {
+  description             = "Customer-managed encryption key for RDS instances"
+  deletion_window_in_days = 7
+  # policy = jsonencode({
+  #   Version = "2012-10-17"
+  #   Statement = [
+  #     {
+  #       Effect = "Allow"
+  #       Principal = {
+  #         AWS = "arn:aws:iam::241886877002:user/Sahil_demo_admin"
+  #       }
+  #       Action = [
+  #         "kms:Encrypt",
+  #         "kms:Decrypt",
+  #         "kms:ReEncrypt*",
+  #         "kms:GenerateDataKey*",
+  #         "kms:DescribeKey"
+  #       ]
+  #       Resource = "*"
+  #     }
+  #   ]
+  # })
+}
+
+
+resource "aws_kms_key" "ebs_key" {
+  description             = "Customer-managed encryption key for EBS instances"
+  deletion_window_in_days = 7
+}
+
 resource "aws_db_instance" "rds_instance" {
   identifier             = "csye6225"
   allocated_storage      = 20
@@ -486,6 +526,10 @@ resource "aws_db_instance" "rds_instance" {
   vpc_security_group_ids = [aws_security_group.db.id]
   db_subnet_group_name   = aws_db_subnet_group.private_rds_subnet_group.name
   parameter_group_name   = aws_db_parameter_group.postgres_params.name
+  kms_key_id             = aws_kms_key.rds_encryption_key.arn
+  storage_encrypted      = true
+
+
 }
 
 output "rds_endpoint" {
@@ -538,8 +582,10 @@ data "aws_route53_zone" "main" {
 resource "aws_lb_listener" "lb_listener" {
 
   load_balancer_arn = aws_lb.load_balancer.arn
-  port              = "80"
-  protocol          = "HTTP"
+  port              = "443"
+  protocol          = "HTTPS"
+  certificate_arn   = data.aws_acm_certificate.aws_acm_certificate.arn
+  //arn:aws:acm:us-east-2:241886877002:certificate/30aee16a-9a7f-4e01-9cac-cb66799ce79a
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.target_group.arn
@@ -640,3 +686,14 @@ resource "aws_autoscaling_policy" "downautoscaling_policy" {
 resource "aws_cloudwatch_log_group" "csye6225-spring2023" {
   name = "csye6225-spring2023"
 }
+
+data "aws_acm_certificate" "aws_acm_certificate" {
+  domain   = var.domain_name
+  statuses = ["ISSUED"]
+}
+
+# resource "aws_lb_listener_certificate" "aws_lb_listener_certificate" {
+#   listener_arn    = "${aws_lb_listener.lb_listener.arn}"
+#   certificate_arn = "${data.aws_acm_certificate.aws_acm_certificate.arn}"
+# }
+
