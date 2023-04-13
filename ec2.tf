@@ -229,8 +229,8 @@ resource "aws_launch_template" "lt" {
       delete_on_termination = true
       volume_size           = 50
       volume_type           = "gp2"
-      # kms_key_id            = aws_kms_key.ebs_key.arn
-      # encrypted             = true
+      kms_key_id            = aws_kms_key.ebs_key.arn
+      encrypted             = true
     }
   }
 
@@ -288,20 +288,21 @@ resource "aws_autoscaling_group" "autoscaling" {
   force_delete              = true
   default_cooldown          = 60
 
-
   launch_template {
     id      = aws_launch_template.lt.id
     version = aws_launch_template.lt.latest_version
-    
   }
+
+
   target_group_arns = [aws_lb_target_group.target_group.arn]
+
   tag {
     key                 = "Key"
     value               = "Value"
     propagate_at_launch = true
   }
-
 }
+
 resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "EC2-CSYE6225-Instance-Profile"
 
@@ -510,7 +511,64 @@ resource "aws_kms_key" "rds_encryption_key" {
 resource "aws_kms_key" "ebs_key" {
   description             = "Customer-managed encryption key for EBS instances"
   deletion_window_in_days = 7
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "kms:*"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow administration of the key"
+        Effect = "Allow"
+        Principal = {
+          AWS = ["arn:aws:iam::241886877002:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
+          "arn:aws:iam::241886877002:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]
+        }
+        Action = [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*",
+          "kms:Delete*",
+          "kms:TagResource",
+          "kms:UntagResource",
+          "kms:ScheduleKeyDeletion",
+          "kms:CancelKeyDeletion"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow use of the key for EBS encryption"
+        Effect = "Allow"
+        Principal = {
+          Service = ["ec2.amazonaws.com"]
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
 }
+
 
 resource "aws_db_instance" "rds_instance" {
   identifier             = "csye6225"
