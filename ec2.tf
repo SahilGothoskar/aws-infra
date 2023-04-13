@@ -289,8 +289,9 @@ resource "aws_autoscaling_group" "autoscaling" {
   default_cooldown          = 60
 
   launch_template {
-    id      = aws_launch_template.lt.id
-    version = aws_launch_template.lt.latest_version
+    id = aws_launch_template.lt.id
+    //version = aws_launch_template.lt.latest_version
+    version = "$Latest"
   }
 
 
