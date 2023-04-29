@@ -484,29 +484,29 @@ resource "aws_db_subnet_group" "private_rds_subnet_group" {
   subnet_ids  = aws_subnet.private.*.id
 }
 
-resource "aws_kms_key" "rds_encryption_key" {
-  description             = "Customer-managed encryption key for RDS instances"
-  deletion_window_in_days = 7
-  # policy = jsonencode({
-  #   Version = "2012-10-17"
-  #   Statement = [
-  #     {
-  #       Effect = "Allow"
-  #       Principal = {
-  #         AWS = "arn:aws:iam::241886877002:user/Sahil_demo_admin"
-  #       }
-  #       Action = [
-  #         "kms:Encrypt",
-  #         "kms:Decrypt",
-  #         "kms:ReEncrypt*",
-  #         "kms:GenerateDataKey*",
-  #         "kms:DescribeKey"
-  #       ]
-  #       Resource = "*"
-  #     }
-  #   ]
-  # })
-}
+ resource "aws_kms_key" "rds_encryption_key" {
+   description             = "Customer-managed encryption key for RDS instances"
+   deletion_window_in_days = 7
+# policy = jsonencode({
+#   Version = "2012-10-17"
+#   Statement = [
+#     {
+#       Effect = "Allow"
+#       Principal = {
+#         AWS = "arn:aws:iam::241886877002:user/Sahil_demo_admin"
+#       }
+#       Action = [
+#         "kms:Encrypt",
+#         "kms:Decrypt",
+#         "kms:ReEncrypt*",
+#         "kms:GenerateDataKey*",
+#         "kms:DescribeKey"
+#       ]
+#       Resource = "*"
+#     }
+#   ]
+# })
+ }
 
 
 resource "aws_kms_key" "ebs_key" {
@@ -530,8 +530,7 @@ resource "aws_kms_key" "ebs_key" {
         Sid    = "Allow administration of the key"
         Effect = "Allow"
         Principal = {
-          AWS = ["arn:aws:iam::241886877002:role/aws-service-role/elasticloadbalancing.amazonaws.com/AWSServiceRoleForElasticLoadBalancing",
-          "arn:aws:iam::241886877002:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]
+          AWS = ["arn:aws:iam::241886877002:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]
         }
         Action = [
           "kms:Create*",
@@ -568,6 +567,9 @@ resource "aws_kms_key" "ebs_key" {
       }
     ]
   })
+  tags = {
+    Name = "EBS_Encryption_Key"
+  }
 }
 
 
