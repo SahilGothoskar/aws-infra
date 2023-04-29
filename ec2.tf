@@ -165,13 +165,6 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.instance.id]
   }
 
-  # ingress {
-  #   from_port   = 22
-  #   to_port     = 22
-  #   protocol    = "tcp"
-  #   cidr_blocks = ["10.0.0.0/8"] # Restrict SSH access to VPC CIDR range
-  # }
-
   egress {
     from_port       = 0
     to_port         = 0
@@ -368,12 +361,6 @@ resource "aws_s3_bucket" "my_bucket" {
 output "bucket_name" {
   value = aws_s3_bucket.my_bucket.bucket
 }
-# resource "aws_s3_bucket_acl" "s3_bucket_acl" {
-#   bucket = "my-${random_pet.bucket_name.id}-bucket"
-#   acl    = "private"
-
-# }
-
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "aws_s3_encrypt" {
   bucket = "my-${random_pet.bucket_name.id}-bucket"
@@ -484,30 +471,8 @@ resource "aws_db_subnet_group" "private_rds_subnet_group" {
   subnet_ids  = aws_subnet.private.*.id
 }
 
-#  resource "aws_kms_key" "rds_encryption_key" {
-#    description             = "Customer-managed encryption key for RDS instances"
-#    deletion_window_in_days = 7
-# policy = jsonencode({
-#   Version = "2012-10-17"
-#   Statement = [
-#     {
-#       Effect = "Allow"
-#       Principal = {
-#         AWS = "arn:aws:iam::241886877002:user/Sahil_demo_admin"
-#       }
-#       Action = [
-#         "kms:Encrypt",
-#         "kms:Decrypt",
-#         "kms:ReEncrypt*",
-#         "kms:GenerateDataKey*",
-#         "kms:DescribeKey"
-#       ]
-#       Resource = "*"
-#     }
-#   ]
-# })
-#  }
 
+#  Symmetric RDS Key for encryption & decryption.
 resource "aws_kms_key" "rds_encryption_key" {
   description             = "Customer-managed encryption key for RDS instances"
   deletion_window_in_days = 7
@@ -686,26 +651,10 @@ output "load_balancer_dns_name" {
   value = aws_lb.load_balancer.dns_name
 }
 
-# output "public_ip" {
-#   value = aws_instance.Terraform_Managed[0].public_ip
-# }
-
-
 data "aws_route53_zone" "main" {
   name = var.domain_name
 
 }
-
-# resource "aws_route53_record" "web" {
-#   name    = var.domain_name
-#   type    = "A"
-#   zone_id = data.aws_route53_zone.main.zone_id
-
-#   ttl = 30
-#   records = [
-#     aws_instance.Terraform_Managed[0].public_ip,
-#   ]
-# }
 
 ######Assignment06####
 resource "aws_lb_listener" "lb_listener" {
@@ -714,7 +663,8 @@ resource "aws_lb_listener" "lb_listener" {
   port              = "443"
   protocol          = "HTTPS"
   certificate_arn   = data.aws_acm_certificate.aws_acm_certificate.arn
-  //arn:aws:acm:us-east-2:241886877002:certificate/30aee16a-9a7f-4e01-9cac-cb66799ce79a
+
+  #Port Forwarding to LB  
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.target_group.arn
@@ -794,6 +744,7 @@ resource "aws_cloudwatch_metric_alarm" "scaledownpolicyalarm" {
   alarm_actions     = [aws_autoscaling_policy.downautoscaling_policy.arn]
 }
 
+//Upscaling AWS Policy
 resource "aws_autoscaling_policy" "upautoscaling_policy" {
   name                   = "upautoscaling_policy"
   scaling_adjustment     = 1
@@ -802,7 +753,7 @@ resource "aws_autoscaling_policy" "upautoscaling_policy" {
   autoscaling_group_name = aws_autoscaling_group.autoscaling.name
 }
 
-
+//Downscaling AWS Policy
 resource "aws_autoscaling_policy" "downautoscaling_policy" {
   name                   = "downautoscaling_policy"
   scaling_adjustment     = -1
@@ -811,7 +762,7 @@ resource "aws_autoscaling_policy" "downautoscaling_policy" {
   autoscaling_group_name = aws_autoscaling_group.autoscaling.name
 }
 
-
+//Log Group Creation using TF
 resource "aws_cloudwatch_log_group" "csye6225-spring2023" {
   name = "csye6225-spring2023"
 }
@@ -820,9 +771,3 @@ data "aws_acm_certificate" "aws_acm_certificate" {
   domain   = var.domain_name
   statuses = ["ISSUED"]
 }
-
-# resource "aws_lb_listener_certificate" "aws_lb_listener_certificate" {
-#   listener_arn    = "${aws_lb_listener.lb_listener.arn}"
-#   certificate_arn = "${data.aws_acm_certificate.aws_acm_certificate.arn}"
-# }
-
