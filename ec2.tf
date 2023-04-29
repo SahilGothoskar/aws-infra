@@ -484,9 +484,9 @@ resource "aws_db_subnet_group" "private_rds_subnet_group" {
   subnet_ids  = aws_subnet.private.*.id
 }
 
- resource "aws_kms_key" "rds_encryption_key" {
-   description             = "Customer-managed encryption key for RDS instances"
-   deletion_window_in_days = 7
+#  resource "aws_kms_key" "rds_encryption_key" {
+#    description             = "Customer-managed encryption key for RDS instances"
+#    deletion_window_in_days = 7
 # policy = jsonencode({
 #   Version = "2012-10-17"
 #   Statement = [
@@ -506,8 +506,71 @@ resource "aws_db_subnet_group" "private_rds_subnet_group" {
 #     }
 #   ]
 # })
- }
+#  }
 
+resource "aws_kms_key" "rds_encryption_key" {
+  description             = "Customer-managed encryption key for RDS instances"
+  deletion_window_in_days = 7
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Id      = "key-policy"
+    Statement = [
+      {
+        Sid    = "Enable IAM User Permissions"
+        Effect = "Allow"
+        Principal = {
+          AWS = "*"
+        }
+        Action = [
+          "kms:Create*",
+          "kms:Describe*",
+          "kms:Enable*",
+          "kms:List*",
+          "kms:Put*",
+          "kms:Update*",
+          "kms:Revoke*",
+          "kms:Disable*",
+          "kms:Get*"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "Allow access to RDS resource"
+        Effect = "Allow"
+        Principal = {
+          Service = "rds.amazonaws.com"
+        }
+        Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*"
+        ]
+        Resource = "*"
+      }
+    ]
+  })
+
+  tags = {
+    Name = "RDS Encryption Key"
+  }
+}
+
+// Alias to EBS KEY
+resource "aws_kms_alias" "rds_encryption_key" {
+  name          = "alias/RDS_KEY"
+  target_key_id = aws_kms_key.rds_encryption_key.id
+}
+
+
+
+
+
+## Symmetric EBS Key for encryption & decryption.
+
+data "aws_caller_identity" "current" {}
 
 resource "aws_kms_key" "ebs_key" {
   description             = "Customer-managed encryption key for EBS instances"
@@ -530,7 +593,7 @@ resource "aws_kms_key" "ebs_key" {
         Sid    = "Allow administration of the key"
         Effect = "Allow"
         Principal = {
-          AWS = ["arn:aws:iam::241886877002:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]
+          AWS = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/autoscaling.amazonaws.com/AWSServiceRoleForAutoScaling"]
         }
         Action = [
           "kms:Create*",
@@ -572,6 +635,11 @@ resource "aws_kms_key" "ebs_key" {
   }
 }
 
+// Alias to EBS KEY
+resource "aws_kms_alias" "ebs_key" {
+  name          = "alias/EBS_KEY"
+  target_key_id = aws_kms_key.ebs_key.id
+}
 
 resource "aws_db_instance" "rds_instance" {
   identifier             = "csye6225"
