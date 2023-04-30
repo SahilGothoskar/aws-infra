@@ -488,15 +488,7 @@ resource "aws_kms_key" "rds_encryption_key" {
           AWS = "*"
         }
         Action = [
-          "kms:Create*",
-          "kms:Describe*",
-          "kms:Enable*",
-          "kms:List*",
-          "kms:Put*",
-          "kms:Update*",
-          "kms:Revoke*",
-          "kms:Disable*",
-          "kms:Get*"
+          "kms:*"
         ]
         Resource = "*"
       },
