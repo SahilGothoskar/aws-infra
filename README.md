@@ -86,40 +86,133 @@ This Terraform script creates an S3 bucket, applies server-side encryption and l
 
 
 
-**aws_security_group.instance resource:**
+# aws-infra
 
+<p align="center">
+    <img src="./AWS_INFRA_GIT.png" alt="AWS infrastructure architecture diagram" width="900" />
+</p>
+
+This repository provisions an AWS environment for a web application using Terraform. The current implementation in `ec2.tf` builds a VPC, public and private subnets, an Application Load Balancer, an Auto Scaling Group backed by a launch template, an encrypted PostgreSQL RDS instance, an encrypted S3 bucket, IAM roles and policies for EC2, Route 53 DNS, ACM-backed HTTPS, KMS keys, and CloudWatch alarms/logging.
+
+## What `ec2.tf` provisions
+
+### Networking
+
+- A VPC with CIDR block `10.0.0.0/16`
+- Public and private subnets across all available availability zones in the selected region
+- An internet gateway
+- Separate public and private route tables
+- Public route table associations for public subnets
+- Private route table associations for private subnets
+
+### Compute and scaling
+
+- An EC2 launch template using:
+    - AMI from `var.ami`
+    - Instance type `t2.micro`
+    - Key pair `SG`
+    - Public subnet placement
+    - Public IP association
+    - 50 GB encrypted gp2 root volume
+    - IAM instance profile attachment
+    - User data that updates application config to use the provisioned RDS endpoint and S3 bucket
+- An Auto Scaling Group with:
+    - Minimum size `1`
+    - Maximum size `3`
+    - Launch template version `$Latest`
+    - Registration with the load balancer target group
+
+### Load balancing and DNS
+
+- An internet-facing Application Load Balancer
+- An HTTPS listener on port `443`
+- A target group forwarding traffic to application instances on port `5000`
+- A Route 53 alias `A` record pointing the domain to the load balancer
+- ACM certificate lookup for the configured domain
+
+### Security groups
+
+- Load balancer security group:
+    - Allows inbound `80` and `443` from anywhere
+    - Allows all outbound traffic
+- Application security group:
+    - Allows inbound `5000` only from the load balancer security group
+    - Allows all outbound traffic
+- Database security group:
+    - Allows inbound `5432` only from the application security group
+
+Note: SSH ingress is currently commented out in the Terraform.
+
+### Storage, database, and encryption
+
+- An S3 bucket with a generated unique name
+- S3 server-side encryption enabled with `AES256`
+- S3 lifecycle transition to `STANDARD_IA` after 30 days
+- S3 public access block configuration
+- Bucket policy that denies insecure transport
+- A PostgreSQL RDS instance:
+    - Engine `postgres`
+    - Version `13.3`
+    - Instance class `db.t3.micro`
+    - Private subnet group placement
+    - Storage encryption enabled with a customer-managed KMS key
+- Customer-managed KMS keys and aliases for:
+    - RDS encryption
+    - EBS encryption
+
+### IAM and observability
+
+- An EC2 IAM role and instance profile
+- IAM policy granting the application access to S3 and CloudWatch APIs
+- Attachment of `CloudWatchAgentServerPolicy`
+- A CloudWatch log group
+- CloudWatch alarms and autoscaling policies for scale up and scale down based on EC2 CPU utilization
+
+## Input variables
+
+`ec2.tf` expects these input variables:
+
+- `region`: AWS region to deploy into
+- `ami`: AMI ID used by the EC2 launch template
+- `domain_name`: Hosted zone domain used for ACM lookup and Route 53 record creation
+
+## Outputs
+
+The Terraform configuration exposes these outputs:
+
+- `bucket_name`
+- `rds_endpoint`
+- `load_balancer_dns_name`
+
+## How to run
+
+```bash
+terraform init
+terraform plan
+terraform apply
 ```
-- Creates a security group for the application instance
-- Allows incoming traffic on ports 22 (SSH), 80 (HTTP), 443 (HTTPS), and 5000 (application-specific port) from any IP address
-- Allows outgoing traffic to any IP address and any port
-- Tags the security group with the name "application-sg"
 
+Terraform will prompt for required variables unless you provide them through a `.tfvars` file, environment variables, or CLI flags.
+
+Example:
+
+```bash
+terraform apply \
+    -var="region=us-east-1" \
+    -var="ami=ami-xxxxxxxxxxxxxxxxx" \
+    -var="domain_name=example.com"
 ```
 
-**aws_security_group.db resource:**
+## Prerequisites and assumptions
 
-```
-- Creates a security group for the database instance
-- Allows incoming traffic on port 5432 (PostgreSQL default port) only from the application instance's security group
-- Allows outgoing traffic to any IP address and any port
-- Tags the security group with the name "db-sg"
-    
-```
-## To run the code
+- The AWS CLI profile `demo` must exist locally because the provider is configured with `profile = "demo"`.
+- The EC2 key pair `SG` must already exist in the target AWS account and region.
+- A matching ACM certificate for `domain_name` must already be issued in AWS.
+- A Route 53 hosted zone for `domain_name` must already exist.
+- The AMI supplied through `var.ami` must contain the expected application files under `/home/ec2-user/scripts/webApp/` because the user data script modifies files in that path.
 
+## Important implementation notes
 
-```
-# terraform init 
-
-# terraform plan  ( It will prompt to enter the ami-id and region)
-
-# terraform apply --auto-approve (Enter the ami-id generated from the packer build  and run in the required region )
-
-```
-
-## To import Certificate
-
-```
-# aws acm import-certificate --certificate fileb://D:/CSYE6225_Assignments_Done_Sahil/demo_sahilgothoskar_me/demo_sahilgothoskar_me.crt --certificate-chain fileb://D:/CSYE6225_Assignments_Done_Sahil/demo_sahilgothoskar_me/demo_sahilgothoskar_me.ca-bundle  --private-key fileb://C:/Users/Sahil/private_key.pem --profile=demo
-
-```
+- The load balancer currently references the first three public subnets explicitly, so the selected region must expose at least three availability zones.
+- The application is expected to serve traffic on port `5000` and expose a `/healthz` endpoint for target group health checks.
+- Database credentials are currently hardcoded in Terraform and should be moved to a more secure mechanism such as AWS Secrets Manager or SSM Parameter Store.
