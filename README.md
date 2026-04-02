@@ -1,3 +1,9 @@
+# aws-infra ☁️
+
+<p align="center">
+    <img src="./AWS_INFRA_GIT.png" alt="AWS infrastructure architecture diagram" width="900" />
+</p>
+
 ### AWS Virtual Private Cloud (VPC) Configuration
 
 ```
@@ -85,12 +91,6 @@ This Terraform script creates an S3 bucket, applies server-side encryption and l
 ### Provisioning AWS Security Groups for Application and Database Instances with Terraform
 
 
-
-# aws-infra ☁️
-
-<p align="center">
-    <img src="./AWS_INFRA_GIT.png" alt="AWS infrastructure architecture diagram" width="900" />
-</p>
 
 This repository provisions an AWS environment for a web application using Terraform. The current implementation in `ec2.tf` builds a VPC, public and private subnets, an Application Load Balancer, an Auto Scaling Group backed by a launch template, an encrypted PostgreSQL RDS instance, an encrypted S3 bucket, IAM roles and policies for EC2, Route 53 DNS, ACM-backed HTTPS, KMS keys, and CloudWatch alarms/logging.
 
