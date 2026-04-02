@@ -1,8 +1,10 @@
+// Configure the AWS provider for the target region using the local demo profile.
 provider "aws" {
   region  = var.region
   profile = "demo"
 }
 
+// Required deployment inputs.
 variable "region" {
   type = string
 }
@@ -10,10 +12,12 @@ variable "ami" {
   type = string
 }
 
+// Discover AZs dynamically so subnets can be spread across the active region.
 data "aws_availability_zones" "available" {
   state = "available"
 }
 
+// Core network: one VPC with DNS support enabled for internal service discovery.
 resource "aws_vpc" "main" {
   cidr_block = "10.0.0.0/16"
 
@@ -27,6 +31,7 @@ resource "aws_vpc" "main" {
 resource "aws_subnet" "public" {
   count = length(data.aws_availability_zones.available.names)
 
+  // Create one public subnet per availability zone.
   cidr_block        = "10.0.${count.index + 1}.0/24"
   vpc_id            = aws_vpc.main.id
   availability_zone = data.aws_availability_zones.available.names[count.index]
@@ -39,6 +44,7 @@ resource "aws_subnet" "public" {
 resource "aws_subnet" "private" {
   count = length(data.aws_availability_zones.available.names)
 
+  // Create one private subnet per availability zone for database placement.
   cidr_block        = "10.0.${count.index + 4}.0/24"
   vpc_id            = aws_vpc.main.id
   availability_zone = data.aws_availability_zones.available.names[count.index]
@@ -48,6 +54,7 @@ resource "aws_subnet" "private" {
   }
 }
 
+// Internet access for public-facing resources such as the load balancer and EC2 instances.
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
@@ -56,6 +63,7 @@ resource "aws_internet_gateway" "main" {
   }
 }
 
+// Route tables split public internet-routable traffic from private-only subnets.
 resource "aws_route_table" "public" {
   vpc_id = aws_vpc.main.id
 
@@ -72,12 +80,14 @@ resource "aws_route_table" "private" {
   }
 }
 
+// Default route for public subnets to reach the internet through the IGW.
 resource "aws_route" "public" {
   route_table_id         = aws_route_table.public.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.main.id
 }
 
+// Attach every generated subnet to the matching route table.
 resource "aws_route_table_association" "public" {
   count          = length(data.aws_availability_zones.available.names)
   subnet_id      = aws_subnet.public[count.index].id
@@ -90,10 +100,12 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
+// Application instances accept traffic only from the ALB on the app port.
 resource "aws_security_group" "instance" {
   name_prefix = "instance-sg"
   vpc_id      = aws_vpc.main.id
 
+  // Uncomment if direct SSH access is required for debugging.
   # ingress {
   #   from_port   = 22
   #   to_port     = 22
@@ -154,6 +166,7 @@ resource "aws_security_group" "load_balancer_sg" {
 }
 
 
+// Restrict PostgreSQL access so only the application tier can reach the database.
 resource "aws_security_group" "db" {
   name_prefix = "db-sg"
   vpc_id      = aws_vpc.main.id
@@ -177,6 +190,7 @@ resource "aws_security_group" "db" {
   }
 }
 
+// Bootstrap the application AMI with runtime values generated during provisioning.
 data "template_file" "user_data" {
 
   template = <<EOF
@@ -201,6 +215,7 @@ resource "aws_launch_template" "lt" {
   disable_api_termination = false
 
   network_interfaces {
+    // The launch template pins the primary interface to the first public subnet.
     associate_public_ip_address = true
     security_groups             = [aws_security_group.instance.id]
     subnet_id                   = aws_subnet.public[0].id
@@ -213,12 +228,14 @@ resource "aws_launch_template" "lt" {
   }
 
   placement {
+    // Keep placement aligned with the subnet chosen above.
     availability_zone = data.aws_availability_zones.available.names[0]
   }
 
   block_device_mappings {
     device_name = "/dev/xvda"
     ebs {
+      // Encrypt the instance root volume with the customer-managed EBS KMS key.
       delete_on_termination = true
       volume_size           = 50
       volume_type           = "gp2"
@@ -232,6 +249,7 @@ resource "aws_launch_template" "lt" {
   }
 }
 
+# Legacy single-instance configuration kept for reference after the move to an ASG.
 # resource "aws_instance" "Terraform_Managed" {
 #   ami                         = var.ami
 #   instance_type               = "t2.micro"
@@ -270,6 +288,7 @@ resource "aws_launch_template" "lt" {
 # }
 
 
+// The ASG keeps at least one instance available and registers instances with the ALB target group.
 resource "aws_autoscaling_group" "autoscaling" {
 
   name                      = "csye6225-asg-spring2023"
@@ -283,7 +302,7 @@ resource "aws_autoscaling_group" "autoscaling" {
 
   launch_template {
     id = aws_launch_template.lt.id
-    //version = aws_launch_template.lt.latest_version
+    // Always use the newest launch template revision when instances are refreshed.
     version = "$Latest"
   }
 
@@ -297,6 +316,7 @@ resource "aws_autoscaling_group" "autoscaling" {
   }
 }
 
+// IAM identity attached to EC2 so the app can access S3 and CloudWatch without static credentials.
 resource "aws_iam_instance_profile" "ec2_instance_profile" {
   name = "EC2-CSYE6225-Instance-Profile"
 
@@ -329,25 +349,19 @@ resource "aws_iam_role_policy_attachment" "webapp_s3_policy_attachment" {
   role       = aws_iam_role.ec2_csye6225_role.name
 }
 
-#Assignment07_Code
-
-
+// Managed policy for the CloudWatch agent running on the EC2 instances.
 resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy_attachment" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
   role       = aws_iam_role.ec2_csye6225_role.name
 }
 
-## Assignment07 Code
-
-
-#Note the addition of the count parameter to ensure that only one instance is created, as well as the use of the data.aws_availability_zones data source to retrieve the list of available availability zones for the selected region, and the use of the [0] index to ensure that the instance is launched in the first available zone. The lifecycle block with the ignore_changes parameter is also added to prevent changes to the subnet ID from triggering the creation of a new instance.
-
-
+// Generate a globally unique suffix because S3 bucket names must be unique across AWS.
 resource "random_pet" "bucket_name" {
   length    = 2
   separator = "-"
 }
 
+// Application asset bucket with encryption and lifecycle management enabled.
 resource "aws_s3_bucket" "my_bucket" {
   bucket        = "my-${random_pet.bucket_name.id}-bucket"
   force_destroy = true
@@ -358,10 +372,12 @@ resource "aws_s3_bucket" "my_bucket" {
 }
 
 
+// Expose the generated bucket name for application and deployment use.
 output "bucket_name" {
   value = aws_s3_bucket.my_bucket.bucket
 }
 
+// Enable default server-side encryption on the bucket.
 resource "aws_s3_bucket_server_side_encryption_configuration" "aws_s3_encrypt" {
   bucket = "my-${random_pet.bucket_name.id}-bucket"
 
@@ -373,6 +389,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "aws_s3_encrypt" {
 }
 
 
+// Transition older objects to a cheaper storage tier after 30 days.
 resource "aws_s3_bucket_lifecycle_configuration" "private_bucket_lifecycle" {
   bucket = "my-${random_pet.bucket_name.id}-bucket"
   rule {
@@ -388,6 +405,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "private_bucket_lifecycle" {
 
 
 
+// Deny insecure transport so objects are only accessed over HTTPS.
 resource "aws_s3_bucket_policy" "private_bucket_policy" {
   bucket = "my-${random_pet.bucket_name.id}-bucket"
   depends_on = [
@@ -429,12 +447,13 @@ resource "aws_s3_bucket_public_access_block" "my_bucket_public_access_block" {
 }
 
 
-# Configure the PostgreSQL parameter group
+// Parameter group placeholder for PostgreSQL-specific engine settings.
 resource "aws_db_parameter_group" "postgres_params" {
   name_prefix = "csye6225-postgres-params"
   family      = "postgres13"
 }
 
+// Application policy covering S3 object access plus CloudWatch metrics and logs.
 resource "aws_iam_policy" "webapp_s3_policy" {
   name = "WebAppS3"
   policy = jsonencode({
@@ -459,12 +478,11 @@ resource "aws_iam_policy" "webapp_s3_policy" {
           "arn:aws:s3:::my-${random_pet.bucket_name.id}-bucket",
           "arn:aws:s3:::my-${random_pet.bucket_name.id}-bucket/*",
         ]
-      },
-    ]
   })
 }
 
 
+// RDS stays isolated in the private subnets.
 resource "aws_db_subnet_group" "private_rds_subnet_group" {
   name        = "private-rds-subnet-group"
   description = "Private subnet group for RDS instances"
@@ -472,7 +490,7 @@ resource "aws_db_subnet_group" "private_rds_subnet_group" {
 }
 
 
-#  Symmetric RDS Key for encryption & decryption.
+// Customer-managed KMS key used to encrypt the PostgreSQL instance.
 resource "aws_kms_key" "rds_encryption_key" {
   description             = "Customer-managed encryption key for RDS instances"
   deletion_window_in_days = 7
@@ -515,7 +533,7 @@ resource "aws_kms_key" "rds_encryption_key" {
   }
 }
 
-// Alias to EBS KEY
+// Stable alias for the RDS encryption key.
 resource "aws_kms_alias" "rds_encryption_key" {
   name          = "alias/RDS_KEY"
   target_key_id = aws_kms_key.rds_encryption_key.id
@@ -525,10 +543,10 @@ resource "aws_kms_alias" "rds_encryption_key" {
 
 
 
-## Symmetric EBS Key for encryption & decryption.
-
+// Look up the current account so the Auto Scaling service-linked role can administer the key.
 data "aws_caller_identity" "current" {}
 
+// Customer-managed KMS key used for EC2 root volume encryption.
 resource "aws_kms_key" "ebs_key" {
   description             = "Customer-managed encryption key for EBS instances"
   deletion_window_in_days = 7
@@ -592,12 +610,13 @@ resource "aws_kms_key" "ebs_key" {
   }
 }
 
-// Alias to EBS KEY
+// Stable alias for the EBS encryption key.
 resource "aws_kms_alias" "ebs_key" {
   name          = "alias/EBS_KEY"
   target_key_id = aws_kms_key.ebs_key.id
 }
 
+// PostgreSQL instance for the application, deployed privately and encrypted at rest.
 resource "aws_db_instance" "rds_instance" {
   identifier             = "csye6225"
   allocated_storage      = 20
@@ -618,16 +637,17 @@ resource "aws_db_instance" "rds_instance" {
 
 }
 
+// Export the resolved database endpoint for downstream use.
 output "rds_endpoint" {
   value = aws_db_instance.rds_instance.endpoint
 }
 
-###Assignment06#####
-
+// Domain used for Route 53 resolution and ACM certificate lookup.
 variable "domain_name" {
   type = string
 }
 
+// Internet-facing application load balancer spanning the first three public subnets.
 resource "aws_lb" "load_balancer" {
   name               = "web-lb"
   internal           = false
@@ -639,16 +659,18 @@ resource "aws_lb" "load_balancer" {
   }
 }
 
+// Export the ALB DNS name for verification and DNS troubleshooting.
 output "load_balancer_dns_name" {
   value = aws_lb.load_balancer.dns_name
 }
 
+// Resolve the hosted zone matching the requested application domain.
 data "aws_route53_zone" "main" {
   name = var.domain_name
 
 }
 
-######Assignment06####
+// HTTPS listener terminates TLS at the ALB and forwards traffic to the target group.
 resource "aws_lb_listener" "lb_listener" {
 
   load_balancer_arn = aws_lb.load_balancer.arn
@@ -656,7 +678,7 @@ resource "aws_lb_listener" "lb_listener" {
   protocol          = "HTTPS"
   certificate_arn   = data.aws_acm_certificate.aws_acm_certificate.arn
 
-  #Port Forwarding to LB  
+  // Forward validated HTTPS traffic to the application instances.
   default_action {
     type             = "forward"
     target_group_arn = aws_lb_target_group.target_group.arn
@@ -665,6 +687,7 @@ resource "aws_lb_listener" "lb_listener" {
 }
 
 
+// Register EC2 instances and health check the application on /healthz.
 resource "aws_lb_target_group" "target_group" {
   name        = "web-tg"
   port        = 5000
@@ -683,6 +706,7 @@ resource "aws_lb_target_group" "target_group" {
 
 }
 
+// Publish the public application DNS record as an alias to the ALB.
 resource "aws_route53_record" "web" {
   name    = var.domain_name
   type    = "A"
@@ -695,8 +719,7 @@ resource "aws_route53_record" "web" {
   }
 }
 
-# Upscaling 
-
+// Scale out when average ASG CPU stays above the configured threshold.
 resource "aws_cloudwatch_metric_alarm" "scaleuppolicyalarm" {
   alarm_name          = "scaleuppolicyalarm"
   comparison_operator = "GreaterThanOrEqualToThreshold"
@@ -716,8 +739,7 @@ resource "aws_cloudwatch_metric_alarm" "scaleuppolicyalarm" {
 }
 
 
-#Downscaling 
-
+// Scale in when average ASG CPU drops below the configured threshold.
 resource "aws_cloudwatch_metric_alarm" "scaledownpolicyalarm" {
   alarm_name          = "scaledownpolicyalarm"
   comparison_operator = "LessThanThreshold"
@@ -736,7 +758,7 @@ resource "aws_cloudwatch_metric_alarm" "scaledownpolicyalarm" {
   alarm_actions     = [aws_autoscaling_policy.downautoscaling_policy.arn]
 }
 
-//Upscaling AWS Policy
+// Add capacity when the scale-up alarm fires.
 resource "aws_autoscaling_policy" "upautoscaling_policy" {
   name                   = "upautoscaling_policy"
   scaling_adjustment     = 1
@@ -745,7 +767,7 @@ resource "aws_autoscaling_policy" "upautoscaling_policy" {
   autoscaling_group_name = aws_autoscaling_group.autoscaling.name
 }
 
-//Downscaling AWS Policy
+// Remove capacity when the scale-down alarm fires.
 resource "aws_autoscaling_policy" "downautoscaling_policy" {
   name                   = "downautoscaling_policy"
   scaling_adjustment     = -1
@@ -754,11 +776,12 @@ resource "aws_autoscaling_policy" "downautoscaling_policy" {
   autoscaling_group_name = aws_autoscaling_group.autoscaling.name
 }
 
-//Log Group Creation using TF
+// Central log group for application or agent logs created by the stack.
 resource "aws_cloudwatch_log_group" "csye6225-spring2023" {
   name = "csye6225-spring2023"
 }
 
+// Reuse an already-issued ACM certificate for the application domain.
 data "aws_acm_certificate" "aws_acm_certificate" {
   domain   = var.domain_name
   statuses = ["ISSUED"]
