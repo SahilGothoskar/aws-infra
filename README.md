@@ -86,7 +86,7 @@ This Terraform script creates an S3 bucket, applies server-side encryption and l
 
 
 
-# aws-infra
+# aws-infra ☁️
 
 <p align="center">
     <img src="./AWS_INFRA_GIT.png" alt="AWS infrastructure architecture diagram" width="900" />
@@ -94,9 +94,9 @@ This Terraform script creates an S3 bucket, applies server-side encryption and l
 
 This repository provisions an AWS environment for a web application using Terraform. The current implementation in `ec2.tf` builds a VPC, public and private subnets, an Application Load Balancer, an Auto Scaling Group backed by a launch template, an encrypted PostgreSQL RDS instance, an encrypted S3 bucket, IAM roles and policies for EC2, Route 53 DNS, ACM-backed HTTPS, KMS keys, and CloudWatch alarms/logging.
 
-## What `ec2.tf` provisions
+## What `ec2.tf` provisions 🏗️
 
-### Networking
+### Networking 🌐
 
 - A VPC with CIDR block `10.0.0.0/16`
 - Public and private subnets across all available availability zones in the selected region
@@ -105,7 +105,7 @@ This repository provisions an AWS environment for a web application using Terraf
 - Public route table associations for public subnets
 - Private route table associations for private subnets
 
-### Compute and scaling
+### Compute and scaling 🖥️
 
 - An EC2 launch template using:
     - AMI from `var.ami`
@@ -122,7 +122,7 @@ This repository provisions an AWS environment for a web application using Terraf
     - Launch template version `$Latest`
     - Registration with the load balancer target group
 
-### Load balancing and DNS
+### Load balancing and DNS 🔀
 
 - An internet-facing Application Load Balancer
 - An HTTPS listener on port `443`
@@ -130,7 +130,7 @@ This repository provisions an AWS environment for a web application using Terraf
 - A Route 53 alias `A` record pointing the domain to the load balancer
 - ACM certificate lookup for the configured domain
 
-### Security groups
+### Security groups 🔐
 
 - Load balancer security group:
     - Allows inbound `80` and `443` from anywhere
@@ -143,7 +143,7 @@ This repository provisions an AWS environment for a web application using Terraf
 
 Note: SSH ingress is currently commented out in the Terraform.
 
-### Storage, database, and encryption
+### Storage, database, and encryption 🗄️
 
 - An S3 bucket with a generated unique name
 - S3 server-side encryption enabled with `AES256`
@@ -160,7 +160,7 @@ Note: SSH ingress is currently commented out in the Terraform.
     - RDS encryption
     - EBS encryption
 
-### IAM and observability
+### IAM and observability 📊
 
 - An EC2 IAM role and instance profile
 - IAM policy granting the application access to S3 and CloudWatch APIs
@@ -168,7 +168,7 @@ Note: SSH ingress is currently commented out in the Terraform.
 - A CloudWatch log group
 - CloudWatch alarms and autoscaling policies for scale up and scale down based on EC2 CPU utilization
 
-## Input variables
+## Input variables 🧾
 
 `ec2.tf` expects these input variables:
 
@@ -176,7 +176,7 @@ Note: SSH ingress is currently commented out in the Terraform.
 - `ami`: AMI ID used by the EC2 launch template
 - `domain_name`: Hosted zone domain used for ACM lookup and Route 53 record creation
 
-## Outputs
+## Outputs 📤
 
 The Terraform configuration exposes these outputs:
 
@@ -184,7 +184,7 @@ The Terraform configuration exposes these outputs:
 - `rds_endpoint`
 - `load_balancer_dns_name`
 
-## How to run
+## How to run 🚀
 
 ```bash
 terraform init
@@ -203,7 +203,7 @@ terraform apply \
     -var="domain_name=example.com"
 ```
 
-## Prerequisites and assumptions
+## Prerequisites and assumptions ✅
 
 - The AWS CLI profile `demo` must exist locally because the provider is configured with `profile = "demo"`.
 - The EC2 key pair `SG` must already exist in the target AWS account and region.
@@ -211,7 +211,7 @@ terraform apply \
 - A Route 53 hosted zone for `domain_name` must already exist.
 - The AMI supplied through `var.ami` must contain the expected application files under `/home/ec2-user/scripts/webApp/` because the user data script modifies files in that path.
 
-## Important implementation notes
+## Important implementation notes ⚠️
 
 - The load balancer currently references the first three public subnets explicitly, so the selected region must expose at least three availability zones.
 - The application is expected to serve traffic on port `5000` and expose a `/healthz` endpoint for target group health checks.
